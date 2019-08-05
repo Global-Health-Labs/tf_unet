@@ -2,12 +2,7 @@
 Tensorflow Unet
 =============================
 
-Admittedly, it's not in the readme but you can find the information in the documentation:
-
-See the usage section of the rtd
-There is an executable demo on binder
-There are ample examples in the script folder
-The unet uses simple tensors as input
+## For more documentation :: https://github.com/jakeret/tf_unet/issues/140 
 
 
 .. image:: https://readthedocs.org/projects/tf-unet/badge/?version=latest
