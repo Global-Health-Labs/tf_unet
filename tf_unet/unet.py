@@ -17,10 +17,12 @@ Created on Jul 28, 2016
 
 author: jakeret
 '''
+
 from __future__ import print_function, division, absolute_import, unicode_literals
 
 import os
 import shutil
+import ipdb
 import numpy as np
 from collections import OrderedDict
 import logging
@@ -240,11 +242,17 @@ class Unet(object):
                     loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(logits=flat_logits,
                                                                                      labels=flat_labels))
             elif cost_name == "dice_coefficient":
-                eps = 1e-5
-                prediction = pixel_wise_softmax(logits)
-                intersection = tf.reduce_sum(prediction * self.y)
-                union = eps + tf.reduce_sum(prediction) + tf.reduce_sum(self.y)
-                loss = -(2 * intersection / (union))
+                smooth = 1.
+                intersection = tf.reduce_sum(flat_logits * flat_labels)
+                score = (2 * intersection + smooth) / (tf.reduce_sum(flat_labels) + tf.reduce_sum(flat_logits) + smooth)
+                loss = 1 - score
+
+            elif cost_name == "heatmap_loss":
+
+                loss_c1 = tf.losses.huber_loss(flat_labels[:,0],flat_logits[:,0])
+                loss_c2 = tf.losses.huber_loss(flat_labels[:,1],flat_logits[:,1])
+
+                loss = loss_c1*.5 + loss_c2*1.80
 
             else:
                 raise ValueError("Unknown cost function: " % cost_name)
@@ -326,7 +334,7 @@ class Trainer(object):
 
     def _get_optimizer(self, training_iters, global_step):
         if self.optimizer == "momentum":
-            learning_rate = self.opt_kwargs.pop("learning_rate", 0.2)
+            learning_rate = self.opt_kwargs.pop("learning_rate", 0.002)
             decay_rate = self.opt_kwargs.pop("decay_rate", 0.95)
             momentum = self.opt_kwargs.pop("momentum", 0.2)
 
@@ -340,7 +348,7 @@ class Trainer(object):
                                                    **self.opt_kwargs).minimize(self.net.cost,
                                                                                global_step=global_step)
         elif self.optimizer == "adam":
-            learning_rate = self.opt_kwargs.pop("learning_rate", 0.001)
+            learning_rate = self.opt_kwargs.pop("learning_rate", 0.000001)
             self.learning_rate_node = tf.Variable(learning_rate, name="learning_rate")
 
             optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate_node,

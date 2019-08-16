@@ -13,9 +13,10 @@
 
 '''
 author: jakeret
+
 '''
 from __future__ import print_function, division, absolute_import, unicode_literals
-
+import ipdb
 import glob
 import numpy as np
 from PIL import Image
@@ -68,9 +69,8 @@ class BaseDataProvider(object):
 
             labels[..., 1] = label
             labels[..., 0] = ~label
-            return labels
 
-        return label
+        return labels
 
     def _process_data(self, data):
         # normalization
@@ -186,7 +186,10 @@ class ImageDataProvider(BaseDataProvider):
         return [name for name in all_files if self.data_suffix in name and not self.mask_suffix in name]
 
     def _load_file(self, path, dtype=np.float32):
-        return np.array(Image.open(path), dtype)
+        if "_mask" in path:
+          return np.array(Image.open(path), dtype)[:,:,0]
+        else:
+          return np.array(Image.open(path), dtype)[:,:,0]
 
     def _cylce_file(self):
         self.file_idx += 1
@@ -203,4 +206,5 @@ class ImageDataProvider(BaseDataProvider):
         img = self._load_file(image_name, np.float32)
         label = self._load_file(label_name, np.bool)
 
+        #ipdb.set_trace()
         return img,label
