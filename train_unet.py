@@ -7,14 +7,14 @@ import numpy as np
 from random import shuffle
 from tf_unet import unet, util, image_util
 
-os.environ["CUDA_VISIBLE_DEVICES"]="2"
+os.environ["CUDA_VISIBLE_DEVICES"]="0"
 TEST_SAMPLES = 5
+IMAGE_SHAPE = (600,600)
 
 #preparing data loading
-data_provider = image_util.ImageDataProvider("/con_data/heatmap_work/train_unet/**.tif")
+data_provider = image_util.ImageDataProvider("/con_data/heatmap_work/kaggle_utz/train/train/**.tif", image_shape=IMAGE_SHAPE)
 
 output_path = "/con_data/heatmap_work/train_logs/"
-
 
 def _process_data(data):
     # normalization
@@ -27,26 +27,34 @@ def _process_data(data):
     return data
 
 #setup & training
-
-net = unet.Unet(cost = "heatmap_loss", layers=4, features_root = 64, channels = 1, n_class=2)
-trainer = unet.Trainer(net,optimizer="adam", batch_size=2)
-path = trainer.train(data_provider, output_path, training_iters=32, epochs=10,dropout=0.45) # probability to keep units)
+net = unet.Unet(cost = "dice_coefficient", layers=4, features_root = 32, channels = 1, n_class=2, cost_kwargs = {"class_weights":[0.001333,0.966]})
+trainer = unet.Trainer(net, optimizer="adam", batch_size=4)
+path = trainer.train(data_provider, output_path, training_iters=32, epochs=3, dropout=0.70) # probability to keep units)
 
 # param x_test: Data to predict on. Shape [n, nx, ny, channels]
-test_path = "/con_data/heatmap_work/val_unet/"
+test_path = "/con_data/heatmap_work/kaggle_utz/test/test/"
 
-test_images = glob.glob(test_path + "**.jpg")
-shuffle(test_images)
+test_images = glob.glob(test_path + "**.tif")
 
-test_images = test_images[0:5] #
+filtered_test_images = []
+# filter out the mask images.
+for _test_image in test_images:
+    if "_mask" not in _test_image:
+        filtered_test_images.append(_test_image)
 
-num_test_images = len(test_images)
-x_test = np.zeros((num_test_images,800,800,1))
+shuffle(filtered_test_images)
+
+filtered_test_images = filtered_test_images[0:5]
+
+num_test_images = len(filtered_test_images)
+x_test = np.zeros((num_test_images,IMAGE_SHAPE[0],IMAGE_SHAPE[1],1))
 
 for img_idx in range(num_test_images):
-  img_data = cv2.imread(test_images[img_idx])[:,:,0]
+  img_data = cv2.imread(filtered_test_images[img_idx])
+
+  img_data = cv2.resize(img_data,IMAGE_SHAPE)
   img_data = _process_data(img_data)
-  x_test[img_idx,:,:,0] = img_data
+  x_test[img_idx,:,:,0] = img_data[:,:,0]
 
 
 prediction = net.predict("/con_data/heatmap_work/train_logs/model.ckpt", x_test)

@@ -20,6 +20,8 @@ author: jakeret
 from __future__ import print_function, division, absolute_import, unicode_literals
 
 import tensorflow as tf
+import numpy as np
+import ipdb
 
 def weight_variable(shape, stddev=0.1, name="weight"):
     initial = tf.truncated_normal(shape, stddev=stddev)
@@ -59,10 +61,17 @@ def crop_and_concat(x1,x2):
 
 def pixel_wise_softmax(output_map):
     with tf.name_scope("pixel_wise_softmax"):
+        #softmax_op = tf.nn.softmax(output_map,axis=3)
+        #exponential_map = tf.exp(output_map)
+        #normalize = tf.reduce_sum(exponential_map, axis=3, keepdims=True)
+
+
         max_axis = tf.reduce_max(output_map, axis=3, keepdims=True)
+        #ipdb.set_trace()
         exponential_map = tf.exp(output_map - max_axis)
         normalize = tf.reduce_sum(exponential_map, axis=3, keepdims=True)
-        return exponential_map / normalize
+
+        return exponential_map / normalize #softmax_op
 
 def cross_entropy(y_,output_map):
     return -tf.reduce_mean(y_*tf.log(tf.clip_by_value(output_map,1e-10,1.0)), name="cross_entropy")

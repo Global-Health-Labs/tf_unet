@@ -41,7 +41,6 @@ def create_conv_net(x, keep_prob, channels, n_class, layers=3, features_root=16,
                     summaries=True):
     """
     Creates a new convolutional unet for the given parametrization.
-
     :param x: input tensor, shape [?,nx,ny,channels]
     :param keep_prob: dropout probability tensor
     :param channels: number of channels in the input image
@@ -94,8 +93,16 @@ def create_conv_net(x, keep_prob, channels, n_class, layers=3, features_root=16,
 
             conv1 = conv2d(in_node, w1, b1, keep_prob)
             tmp_h_conv = tf.nn.relu(conv1)
-            conv2 = conv2d(tmp_h_conv, w2, b2, keep_prob)
-            dw_h_convs[layer] = tf.nn.relu(conv2)
+
+            # Add BN here
+            tmp_h_conv_norm = tf.layers.batch_normalization(tmp_h_conv)
+
+            conv2 = conv2d(tmp_h_conv_norm, w2, b2, keep_prob)
+            #dw_h_convs[layer] = tf.nn.relu(conv2)
+
+            # Layer with BN
+            dw_h_convs[layer] = tf.layers.batch_normalization(tf.nn.relu(conv2))
+
 
             weights.append((w1, w2))
             biases.append((b1, b2))
@@ -127,9 +134,23 @@ def create_conv_net(x, keep_prob, channels, n_class, layers=3, features_root=16,
             b2 = bias_variable([features // 2], name="b2")
 
             conv1 = conv2d(h_deconv_concat, w1, b1, keep_prob)
-            h_conv = tf.nn.relu(conv1)
+
+            conv1_norm = tf.layers.batch_normalization(conv1)
+
+            h_conv = tf.nn.relu(conv1_norm)
+
+            # Add BN here
+            #h_conv_norm = tf.layers.batch_normalization(h_conv)
+
+
             conv2 = conv2d(h_conv, w2, b2, keep_prob)
-            in_node = tf.nn.relu(conv2)
+            conv2_norm = tf.layers.batch_normalization(conv2)
+
+            in_node = tf.nn.relu(conv2_norm)
+
+            # Add BN here
+            #in_node_norm = tf.layers.batch_normalization(in_node)
+
             up_h_convs[layer] = in_node
 
             weights.append((w1, w2))
@@ -225,12 +246,13 @@ class Unet(object):
             flat_labels = tf.reshape(self.y, [-1, self.n_class])
             if cost_name == "cross_entropy":
                 class_weights = cost_kwargs.pop("class_weights", None)
-
+                # class_weights = flat_labels
                 if class_weights is not None:
                     class_weights = tf.constant(np.array(class_weights, dtype=np.float32))
 
                     weight_map = tf.multiply(flat_labels, class_weights)
                     weight_map = tf.reduce_sum(weight_map, axis=1)
+
 
                     loss_map = tf.nn.softmax_cross_entropy_with_logits_v2(logits=flat_logits,
                                                                           labels=flat_labels)
@@ -239,21 +261,72 @@ class Unet(object):
                     loss = tf.reduce_mean(weighted_loss)
 
                 else:
-                    loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(logits=flat_logits,
+                    smooth = 1.
+                    intersection = tf.reduce_sum(flat_logits * flat_labels)
+                    score = (2 * intersection + smooth) / (
+                                tf.reduce_sum(flat_labels) + tf.reduce_sum(flat_logits) + smooth)
+                    dice_loss = 1 - score
+                    entropy_loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(logits=flat_logits,
                                                                                      labels=flat_labels))
+
+                    loss = dice_loss + entropy_loss
+
             elif cost_name == "dice_coefficient":
+
+                """
                 smooth = 1.
                 intersection = tf.reduce_sum(flat_logits * flat_labels)
                 score = (2 * intersection + smooth) / (tf.reduce_sum(flat_labels) + tf.reduce_sum(flat_logits) + smooth)
                 loss = 1 - score
+                ipdb.set_trace()
+                
+                """
+
+                """
+                
+                flat_labels_c1 = flat_labels[:,0]
+                flat_logits_c1 = flat_logits[:,0]
+                smooth = 1.
+                intersection_c1 = tf.reduce_sum(flat_logits_c1 * flat_labels_c1)
+                score_c1 = (2 * intersection_c1 + smooth) / (tf.reduce_sum(flat_labels_c1) + tf.reduce_sum(flat_logits_c1) + smooth)
+                loss_c1 = 1 - score_c1
+
+                """
+
+                class_weights = cost_kwargs.pop("class_weights", None)
+                # class_weights = flat_labels
+                if class_weights is not None:
+                    class_weights = tf.constant(np.array(class_weights, dtype=np.float32))
+
+                    weight_map = tf.multiply(flat_labels, class_weights)
+                    weight_map = tf.reduce_sum(weight_map, axis=1)
+
+
+                    loss_map = tf.nn.softmax_cross_entropy_with_logits_v2(logits=flat_logits,
+                                                                          labels=flat_labels)
+                    weighted_loss = tf.multiply(loss_map, weight_map)
+
+                    entropy_loss = tf.reduce_mean(weighted_loss)
+
+
+
+                flat_labels_c2 = flat_labels[:,1]
+                flat_logits_c2 = flat_logits[:,1]
+                smooth = 1.
+                intersection_c2 = tf.reduce_sum(flat_logits_c2 * flat_labels_c2)
+                score_c2 = (2 * intersection_c2 + smooth) / (tf.reduce_sum(flat_labels_c2) + tf.reduce_sum(flat_logits_c2) + smooth)
+                loss_c2 = 1 - score_c2
+
+                dice_loss = loss_c2
+
+                loss = entropy_loss + dice_loss
+
 
             elif cost_name == "heatmap_loss":
-
-                loss_c1 = tf.losses.huber_loss(flat_labels[:,0],flat_logits[:,0])
-                loss_c2 = tf.losses.huber_loss(flat_labels[:,1],flat_logits[:,1])
-
-                loss = loss_c1*.5 + loss_c2*1.80
-
+                smooth = 1.
+                intersection = tf.reduce_sum(flat_logits * flat_labels)
+                score = (2 * intersection + smooth) / (tf.reduce_sum(flat_labels) + tf.reduce_sum(flat_logits) + smooth)
+                loss = 1 - score
             else:
                 raise ValueError("Unknown cost function: " % cost_name)
 
@@ -336,7 +409,7 @@ class Trainer(object):
         if self.optimizer == "momentum":
             learning_rate = self.opt_kwargs.pop("learning_rate", 0.002)
             decay_rate = self.opt_kwargs.pop("decay_rate", 0.95)
-            momentum = self.opt_kwargs.pop("momentum", 0.2)
+            momentum = self.opt_kwargs.pop("momentum", 0.8)
 
             self.learning_rate_node = tf.train.exponential_decay(learning_rate=learning_rate,
                                                                  global_step=global_step,
@@ -348,7 +421,7 @@ class Trainer(object):
                                                    **self.opt_kwargs).minimize(self.net.cost,
                                                                                global_step=global_step)
         elif self.optimizer == "adam":
-            learning_rate = self.opt_kwargs.pop("learning_rate", 0.000001)
+            learning_rate = self.opt_kwargs.pop("learning_rate", 0.0001)
             self.learning_rate_node = tf.Variable(learning_rate, name="learning_rate")
 
             optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate_node,

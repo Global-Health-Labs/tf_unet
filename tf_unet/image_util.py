@@ -15,6 +15,7 @@
 author: jakeret
 
 '''
+
 from __future__ import print_function, division, absolute_import, unicode_literals
 import ipdb
 import glob
@@ -63,24 +64,28 @@ class BaseDataProvider(object):
             labels = np.zeros((ny, nx, self.n_class), dtype=np.float32)
 
             # It is the responsibility of the child class to make sure that the label
-            # is a boolean array, but we a chech here just in case.
-            if label.dtype != 'bool':
-                label = label.astype(np.bool)
+            # is a boolean array, but we a check here just in case.
+            #if label.dtype != np.float32:
+            #    label = label.astype(np.float32)
 
+            #if np.amax(label) != 0:
+            #    label /= np.amax(label)
+
+            label = label/255.
             labels[..., 1] = label
-            labels[..., 0] = ~label
+            labels[..., 0] = 1 - label
 
         return labels
 
     def _process_data(self, data):
         # normalization
-        data = np.clip(np.fabs(data), self.a_min, self.a_max)
-        data -= np.amin(data)
+        #data = np.clip(np.fabs(data), self.a_min, self.a_max)
+        #data -= np.amin(data)
 
-        if np.amax(data) != 0:
-            data /= np.amax(data)
+        #if np.amax(data) != 0:
+        #    data /= np.amax(data)
 
-        return data
+        return data/255.
 
     def _post_process(self, data, labels):
         """
@@ -156,13 +161,13 @@ class ImageDataProvider(BaseDataProvider):
 
     """
 
-    def __init__(self, search_path, a_min=None, a_max=None, data_suffix=".tif", mask_suffix='_mask.tif', shuffle_data=True):
+    def __init__(self, search_path, image_shape = (600,600), a_min=0, a_max=255, data_suffix=".tif", mask_suffix='_mask.tif', shuffle_data=True):
         super(ImageDataProvider, self).__init__(a_min, a_max)
         self.data_suffix = data_suffix
         self.mask_suffix = mask_suffix
         self.file_idx = -1
         self.shuffle_data = shuffle_data
-
+        self.image_shape = image_shape
         self.data_files = self._find_data_files(search_path)
 
         if self.shuffle_data:
@@ -187,9 +192,10 @@ class ImageDataProvider(BaseDataProvider):
 
     def _load_file(self, path, dtype=np.float32):
         if "_mask" in path:
-          return np.array(Image.open(path), dtype)[:,:,0]
+
+          return np.array(Image.open(path).resize(self.image_shape), dtype)
         else:
-          return np.array(Image.open(path), dtype)[:,:,0]
+          return np.array(Image.open(path).resize(self.image_shape), dtype)
 
     def _cylce_file(self):
         self.file_idx += 1
@@ -204,7 +210,7 @@ class ImageDataProvider(BaseDataProvider):
         label_name = image_name.replace(self.data_suffix, self.mask_suffix)
 
         img = self._load_file(image_name, np.float32)
-        label = self._load_file(label_name, np.bool)
+        label = self._load_file(label_name, np.float32)
 
         #ipdb.set_trace()
         return img,label
