@@ -18,9 +18,11 @@ author: jakeret
 
 from __future__ import print_function, division, absolute_import, unicode_literals
 import ipdb
+import random
 import glob
 import numpy as np
 from PIL import Image
+import cv2
 
 
 class BaseDataProvider(object):
@@ -94,6 +96,67 @@ class BaseDataProvider(object):
         :param data: the data array
         :param labels: the label array
         """
+        data_augmentation_types = ["add_noise","no_aug", "adjust_contrast", "add_blur"] #,"adjust_contrast","add_blur","rows_padding","cols_padding"]
+        # other types to add : labels_jittering,
+
+        no_of_augmentations = len(data_augmentation_types) - 1
+        random_aug_type = random.randint(0,no_of_augmentations)
+        aug_type = data_augmentation_types[random_aug_type]
+
+        if aug_type == "add_noise":
+            noisy_data = data.copy()
+            data_shape = noisy_data.shape
+            no_of_pixels_to_change = random.randint(int(0.01*data_shape[0]*data_shape[1]),
+                                                    int(0.02*data_shape[0]*data_shape[1])) # Any number between 1 % to 2 %
+            pixels_to_change = np.random.randint(0, data_shape[0]*data_shape[1], [no_of_pixels_to_change])
+
+            if len(data_shape) == 3:
+                n_channels = data_shape[2]
+
+            delta = random.uniform(-1,1)
+
+            if len(data_shape) == 3:
+                noisy_data = noisy_data.reshape(data_shape[0] * data_shape[1], data_shape[2])
+                noisy_data[pixels_to_change,:] = noisy_data[pixels_to_change,:] + delta
+                noisy_data = noisy_data.reshape(data_shape[0], data_shape[1], data_shape[2])
+
+            else:
+                noisy_data = noisy_data.reshape(data_shape[0] * data_shape[1])
+                noisy_data[pixels_to_change] = noisy_data[pixels_to_change] + delta
+                noisy_data = noisy_data.reshape(data_shape[0], data_shape[1])
+
+            noisy_data = np.clip(noisy_data, 0, 1)
+            data = noisy_data
+
+
+        if aug_type == "adjust_contrast":
+            noisy_data = data.copy()
+            data_shape = noisy_data.shape
+
+            noisy_data = (noisy_data*255).astype(np.uint8)
+
+            gamma = random.uniform(.90,1.1)
+
+            t = (np.power(np.linspace(0, 1, 256), 1.0 / gamma) * 255).astype(np.uint8)
+
+            noisy_data = cv2.LUT(noisy_data, t)
+
+            noisy_data = noisy_data.astype(np.float32)/255.
+
+            noisy_data = np.clip(noisy_data, 0, 1)
+
+            #cv2.imwrite("/con_data/skulhare/tmp_data/augmented_images/" + str(gamma) + ".jpg",noisy_data*255)
+            data = noisy_data
+
+        if aug_type == "add_blur":
+            noisy_data = data.copy()
+            noisy_data = cv2.blur(noisy_data, (3,3))
+
+            #random_idx = random.randint(1,100000)
+            #cv2.imwrite("/con_data/skulhare/tmp_data/augmented_images/" + str(random_idx) + ".jpg", noisy_data*255)
+            data = noisy_data
+
+
         return data, labels
 
     def __call__(self, n):

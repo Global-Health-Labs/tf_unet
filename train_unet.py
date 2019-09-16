@@ -8,31 +8,34 @@ from random import shuffle
 from tf_unet import unet, util, image_util
 
 os.environ["CUDA_VISIBLE_DEVICES"]="0"
-TEST_SAMPLES = 5
+TEST_SAMPLES = 10
 IMAGE_SHAPE = (600,600)
 
 #preparing data loading
-data_provider = image_util.ImageDataProvider("/con_data/heatmap_work/kaggle_utz/train/train/**.tif", image_shape=IMAGE_SHAPE)
+data_provider = image_util.ImageDataProvider("/con_data/heatmap_work/train/**.tif", image_shape=IMAGE_SHAPE)
 
 output_path = "/con_data/heatmap_work/train_logs/"
 
 def _process_data(data):
     # normalization
-    data = np.clip(np.fabs(data), 0, 255)
-    data -= np.amin(data)
+    #data = np.clip(np.fabs(data), 0, 255)
+    #data -= np.amin(data)
 
-    if np.amax(data) != 0:
-        data /= np.amax(data)
+    #if np.amax(data) != 0:
+    #    data /= np.amax(data)
 
-    return data
+    return data/255.
 
 #setup & training
-net = unet.Unet(cost = "dice_coefficient", layers=4, features_root = 32, channels = 1, n_class=2, cost_kwargs = {"class_weights":[0.001333,0.966]})
-trainer = unet.Trainer(net, optimizer="adam", batch_size=4)
-path = trainer.train(data_provider, output_path, training_iters=32, epochs=3, dropout=0.70) # probability to keep units)
+net = unet.Unet(cost = "dice_coefficient", layers=4, features_root = 64,
+                channels = 1, n_class=2, cost_kwargs = {"class_weights":[0.0001333,0.999]})
+trainer = unet.Trainer(net, optimizer="adam", batch_size=4,
+                       opt_kwargs=dict(learning_rate =  0.0001))
+path = trainer.train(data_provider, output_path, training_iters=32, epochs=50, dropout=0.55) # probability to keep units)
+
 
 # param x_test: Data to predict on. Shape [n, nx, ny, channels]
-test_path = "/con_data/heatmap_work/kaggle_utz/test/test/"
+test_path = "/con_data/heatmap_work/val/"
 
 test_images = glob.glob(test_path + "**.tif")
 
@@ -44,7 +47,7 @@ for _test_image in test_images:
 
 shuffle(filtered_test_images)
 
-filtered_test_images = filtered_test_images[0:5]
+filtered_test_images = filtered_test_images[0:TEST_SAMPLES]
 
 num_test_images = len(filtered_test_images)
 x_test = np.zeros((num_test_images,IMAGE_SHAPE[0],IMAGE_SHAPE[1],1))

@@ -14,7 +14,6 @@
 
 '''
 Created on Jul 28, 2016
-
 author: jakeret
 '''
 
@@ -319,7 +318,25 @@ class Unet(object):
 
                 dice_loss = loss_c2
 
-                loss = entropy_loss + dice_loss
+                loss = dice_loss + entropy_loss
+
+            elif cost_name == "focal_loss":
+
+                smooth = 1.
+                intersection = tf.reduce_sum(flat_logits * flat_labels)
+                score = (2 * intersection + smooth) / (
+                        tf.reduce_sum(flat_labels) + tf.reduce_sum(flat_logits) + smooth)
+                dice_loss = 1 - score
+
+                alpha = 0.45
+                gamma = 6
+
+                # Pt = prob if label = 1 else  1 - prob
+                prob_map = flat_logits[:,0] * flat_labels[:,0] + (1 - flat_logits[:,1] + flat_labels[:,1])
+                focal_loss = -alpha * tf.math.pow(1 - prob_map, gamma) * tf.math.log(prob_map)
+                #ipdb.set_trace()
+
+                loss = tf.reduce_mean(focal_loss) + dice_loss
 
 
             elif cost_name == "heatmap_loss":
@@ -421,7 +438,7 @@ class Trainer(object):
                                                    **self.opt_kwargs).minimize(self.net.cost,
                                                                                global_step=global_step)
         elif self.optimizer == "adam":
-            learning_rate = self.opt_kwargs.pop("learning_rate", 0.0001)
+            learning_rate = self.opt_kwargs.pop("learning_rate", 0.001)
             self.learning_rate_node = tf.Variable(learning_rate, name="learning_rate")
 
             optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate_node,
